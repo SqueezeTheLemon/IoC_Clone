@@ -1,1 +1,2 @@
-rootProject.name = "p-14161-2"
+rootProject.name = "spring-ioc-clone"
+

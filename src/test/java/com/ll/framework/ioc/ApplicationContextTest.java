@@ -1,5 +1,7 @@
 package com.ll.framework.ioc;
 
+import com.fasterxml.jackson.databind.ObjectMapper;
+import com.fasterxml.jackson.datatype.jsr310.JavaTimeModule;
 import com.ll.domain.testPost.testPost.repository.TestPostRepository;
 import com.ll.domain.testPost.testPost.service.TestFacadePostService;
 import com.ll.domain.testPost.testPost.service.TestPostService;
@@ -83,5 +85,21 @@ public class ApplicationContextTest {
                 "testPostRepository",
                 applicationContext.genBean("testPostRepository")
         );
+    }
+
+    @Test
+    @DisplayName("@Bean, 아무런 의존관계가 없는 단순한 빈인 testBaseJavaTimeModule 를 생성")
+    public void t7() {
+        JavaTimeModule testBaseJavaTimeModule = applicationContext.genBean("testBaseJavaTimeModule");
+
+        assertThat(testBaseJavaTimeModule).isNotNull();
+    }
+
+    @Test
+    @DisplayName("@Bean, testBaseJavaTimeModule 빈에 의존하는 testBaseObjectMapper 빈을 생성")
+    public void t8() {
+        ObjectMapper testBaseObjectMapper = applicationContext.genBean("testBaseObjectMapper");
+
+        assertThat(testBaseObjectMapper).isNotNull();
     }
 }
