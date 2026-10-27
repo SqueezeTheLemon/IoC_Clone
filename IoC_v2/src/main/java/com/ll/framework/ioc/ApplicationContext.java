@@ -5,92 +5,79 @@ import com.ll.standard.util.Ut;
 import org.reflections.Reflections;
 
 import java.lang.reflect.Constructor;
-import java.lang.reflect.Modifier;
 import java.util.Arrays;
-import java.util.Comparator;
 import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Map;
 import java.util.Set;
+import java.util.stream.Collectors;
 
 public class ApplicationContext {
-    private final String basePackage;
-    // 빈 이름 -> 빈 클래스 (빈 생성 정보)
-    private final Map<String, Class<?>> beanDefinitions = new HashMap<>();
-    // 빈 이름 -> 생성된 빈 (싱글톤 저장소)
-    private final Map<String, Object> beans = new HashMap<>();
-    // 순환 의존 감지용
-    private final Set<String> beansInCreation = new HashSet<>();
+    final String basePackage;
+    private Map<String, Object> beanMap = new HashMap<>();
 
     public ApplicationContext(String basePackage) {
         this.basePackage = basePackage;
     }
 
     public void init() {
-        Reflections reflections = new Reflections(basePackage);
+        Set<Class<?>> componentClasses = scanComponentClasses();
 
-        // @Component 및 @Component 가 붙은 애너테이션(@Service, @Repository, ...) 이 붙은 타입
-        reflections.getTypesAnnotatedWith(Component.class)
+        // componentClasses에 들어있는 clazz들을 bean으로 만들고 beanMap에 그 이름과 함께 넣음
+        for (Class<?> clazz : componentClasses){
+
+            getOrCreateBean(clazz);
+        }
+    }
+
+    // basePackage 안에서 @Component 게열이 붙은 진짜 클래스만 골라오기
+    private Set<Class<?>> scanComponentClasses() {
+        Reflections reflections = new Reflections(basePackage); // 1. "com.ll"아래를 스캔
+
+        return reflections.getTypesAnnotatedWith(Component.class) // 2. 그 중에 @Component가 붙은 것만 줘
                 .stream()
-                .filter(this::isInstantiable)
-                .forEach(clazz -> beanDefinitions.put(beanNameOf(clazz), clazz));
-
-        beanDefinitions.keySet().forEach(this::genBean);
+                .filter(clazz -> !clazz.isAnnotation())// @Service와 같은 annotation(해당 클래스가 어떤 종류인지 알려주는 꼬리표)는 빼오기
+                .collect(Collectors.toSet());
     }
 
-    @SuppressWarnings("unchecked")
-    public <T> T genBean(String beanName) {
-        Object bean = beans.get(beanName);
-        if (bean != null) return (T) bean;
-
-        Class<?> clazz = beanDefinitions.get(beanName);
-        if (clazz == null) throw new IllegalArgumentException("등록되지 않은 빈입니다: " + beanName);
-
-        if (!beansInCreation.add(beanName)) {
-            throw new IllegalStateException("순환 의존이 발견되었습니다: " + beanName);
-        }
-
-        try {
-            bean = createBean(clazz);
-        } finally {
-            beansInCreation.remove(beanName);
-        }
-
-        beans.put(beanName, bean);
-
-        return (T) bean;
-    }
-
-    private Object createBean(Class<?> clazz) {
-        // 파라미터가 가장 많은 생성자로 주입 (@RequiredArgsConstructor 가 만든 생성자)
-        Constructor<?> constructor = Arrays.stream(clazz.getDeclaredConstructors())
-                .max(Comparator.comparingInt(Constructor::getParameterCount))
-                .orElseThrow();
-
-        Object[] args = Arrays.stream(constructor.getParameterTypes())
-                .map(paramType -> genBean(beanNameOf(paramType)))
-                .toArray();
-
-        try {
-            constructor.setAccessible(true);
-            return constructor.newInstance(args);
-        } catch (ReflectiveOperationException e) {
-            throw new RuntimeException("빈 생성에 실패했습니다: " + clazz.getName(), e);
-        }
-    }
-
-    private boolean isInstantiable(Class<?> clazz) {
-        return !clazz.isInterface()
-                && !clazz.isAnnotation()
-                && !Modifier.isAbstract(clazz.getModifiers());
-    }
-
-    private String beanNameOf(Class<?> clazz) {
+    // 이름 규칙을 지정하는 메소드 - 클래스의 simple name을 받아와 그를 lowercase로 수정
+    private String toBeanName(Class<?> clazz){
         return Ut.str.lcfirst(clazz.getSimpleName());
     }
 
-    @Override
-    public String toString() {
-        return "ApplicationContext{basePackage='%s', beans=%s}".formatted(basePackage, beanDefinitions.keySet());
+    private Object getOrCreateBean(Class<?> clazz){
+        String beanName = toBeanName(clazz);
+
+        // 이미 만든 적 있으면 beanMap에서 조회 후 생성하지 않고 그대로 반환
+        if (beanMap.containsKey(beanName)){
+            return beanMap.get(beanName);
+        }
+
+        Object bean = createBean(clazz);
+        beanMap.put(beanName, bean);
+        return bean;
+    }
+    // reflection으로 bean 생성
+    private Object createBean(Class<?> clazz){
+        try{
+            // 클래스가 가진 생성자 (일단은 하나뿐이라고 가정)를 가져옴
+            Constructor<?> constructor = clazz.getDeclaredConstructors()[0];
+
+            // 생성자가 원하는 타입마다 빈을 구해온다.
+            Object[] args = Arrays.stream(constructor.getParameterTypes())
+                            .map(this::getOrCreateBean)
+                            .toArray();
+
+            constructor.setAccessible(true); // private 생성자여도 만들어줌
+            // 모든 재료를 넣어서 생성
+            return constructor.newInstance(args);
+        } catch (ReflectiveOperationException e) {
+            throw new RuntimeException("빈 생성 실패: " + clazz.getName(), e);
+        }
+    }
+
+    // 경고하지 말라는 표시
+    @SuppressWarnings("unchecked")
+    public <T> T genBean(String beanName) {
+        return (T) beanMap.get(beanName);
     }
 }
