@@ -1,4 +1,4 @@
-# IoC clone 프로젝트
+# IoC clone 프로젝트 - v1
 ## 1. IoC란 무엇인가?
 = Inversion of Control
 
@@ -51,13 +51,13 @@ TestPostService service = new TestPostService(repo);
 
 # 2. Test Case로 확인하고자 하는 것
 
+## 2.1 v1 test
 - t1 : new ApplicationContext()로 객체 생성
 - t2 : getBean("testPostService")로 TestPostService bean 얻어오기 
 - t3 : 같은 이름으로 두번 얻어도 같은 객체임을 확인 (singleTon)
 - t4 : getBean ("testPostRepository")로 TestPostRepository Bean 얻어오기
 - t5 : testPostService의 testPostRepository 필드의 빈이 주입되어 있음 (t2-t4 연결)
 - t6 : testFacadePostService에 testPostService,testPostRepository 빈이 주입되어 있음. 
-
 
 
 
